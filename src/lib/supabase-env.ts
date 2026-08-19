@@ -9,7 +9,7 @@ declare global {
   }
 }
 
-function firstNonEmpty(...values: Array<string | undefined>): string | undefined {
+function firstNonEmpty(...values: Array<string | undefined | null>): string | undefined {
   for (const value of values) {
     const trimmed = value?.trim();
     if (trimmed) return trimmed;
@@ -18,8 +18,16 @@ function firstNonEmpty(...values: Array<string | undefined>): string | undefined
 }
 
 function fromProcess(name: string): string | undefined {
-  if (typeof process === "undefined" || !process.env) return undefined;
-  return process.env[name];
+  const env = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env;
+  return env?.[name];
+}
+
+export function applyPublicSupabaseEnv(cfg: PublicSupabaseEnv | null | undefined) {
+  if (typeof window === "undefined") return;
+  const supabaseUrl = cfg?.supabaseUrl?.trim();
+  const supabaseAnonKey = cfg?.supabaseAnonKey?.trim();
+  if (!supabaseUrl || !supabaseAnonKey) return;
+  window.__ELITESTAY_PUBLIC__ = { supabaseUrl, supabaseAnonKey };
 }
 
 /** Public URL + anon key. Safe for the browser. Never includes the service role key. */
@@ -56,11 +64,34 @@ export function getPublicAppUrl(): string {
 }
 
 export function isPlaceholderSupabaseValue(url?: string, anonKey?: string): boolean {
-  return Boolean(
-    !url ||
-      !anonKey ||
-      url.includes("your-project") ||
-      anonKey === "your-anon-key" ||
-      anonKey.includes("your-anon"),
+  if (!url || !anonKey) return false;
+  return (
+    url.includes("your-project") ||
+    anonKey === "your-anon-key" ||
+    anonKey.includes("your-anon")
   );
+}
+
+export function logClientEnvProbe(reason: string) {
+  const bakedUrl = String(import.meta.env.VITE_SUPABASE_URL ?? "").trim();
+  const bakedAnon = String(import.meta.env.VITE_SUPABASE_ANON_KEY ?? "").trim();
+  const injected = typeof window !== "undefined" ? window.__ELITESTAY_PUBLIC__ : undefined;
+  const { url, anonKey } = readPublicSupabaseEnv();
+  console.info(`[EliteStay] env probe (${reason})`, {
+    bakedViteUrlSet: Boolean(bakedUrl),
+    bakedViteAnonSet: Boolean(bakedAnon),
+    injectedUrlSet: Boolean(injected?.supabaseUrl),
+    injectedAnonSet: Boolean(injected?.supabaseAnonKey),
+    resolvedUrlSet: Boolean(url),
+    resolvedAnonSet: Boolean(anonKey),
+    resolvedUrlHost: url
+      ? (() => {
+          try {
+            return new URL(url).host;
+          } catch {
+            return "(invalid URL)";
+          }
+        })()
+      : null,
+  });
 }

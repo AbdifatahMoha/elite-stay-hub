@@ -8,7 +8,9 @@ import {
   type ReactNode,
 } from "react";
 import type { Session, User } from "@supabase/supabase-js";
-import { getSupabase, isSupabaseConfigured, logSupabaseConfigWarning } from "@/lib/supabase";
+import { getSupabase, isSupabaseConfigured, logSupabaseConfigWarning, resetSupabaseClient } from "@/lib/supabase";
+import { applyPublicSupabaseEnv, logClientEnvProbe } from "@/lib/supabase-env";
+import { getPublicSupabaseConfig } from "@/lib/public-supabase-config";
 import { fetchProfile, upsertProfileAfterSignup } from "@/services/profiles.service";
 import {
   getPostLoginPath,
@@ -51,46 +53,82 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
-  const configured = isSupabaseConfigured();
+  const [configured, setConfigured] = useState(() => isSupabaseConfigured());
 
   const loadProfile = useCallback(async (userId: string) => {
     try {
       const p = await fetchProfile(userId);
       setProfile(p);
       return p;
-    } catch {
+    } catch (error) {
+      console.error("[EliteStay] failed to load profile", error);
       setProfile(null);
       return null;
     }
   }, []);
 
   useEffect(() => {
-    logSupabaseConfigWarning();
-    if (!configured) {
-      setLoading(false);
-      return;
+    let cancelled = false;
+    let unsubscribe: (() => void) | undefined;
+
+    async function boot() {
+      logClientEnvProbe("auth-boot-start");
+      logSupabaseConfigWarning();
+
+      if (!isSupabaseConfigured()) {
+        try {
+          const cfg = await getPublicSupabaseConfig();
+          console.info("[EliteStay] loaded public supabase config from server", {
+            urlSet: Boolean(cfg.supabaseUrl),
+            anonKeySet: Boolean(cfg.supabaseAnonKey),
+          });
+          applyPublicSupabaseEnv(cfg);
+          resetSupabaseClient();
+        } catch (error) {
+          console.error("[EliteStay] failed to load public supabase config", error);
+        }
+      }
+
+      if (cancelled) return;
+      const ready = isSupabaseConfigured();
+      setConfigured(ready);
+      logClientEnvProbe("auth-boot-after-server-config");
+
+      if (!ready) {
+        console.error("[EliteStay] auth unavailable: VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY not present at build or runtime");
+        setLoading(false);
+        return;
+      }
+
+      const supabase = getSupabase();
+      const { data, error } = await supabase.auth.getSession();
+      if (error) console.error("[EliteStay] supabase.auth.getSession failed", error);
+      if (cancelled) return;
+
+      setSession(data.session);
+      setUser(data.session?.user ?? null);
+      if (data.session?.user) await loadProfile(data.session.user.id);
+      if (!cancelled) setLoading(false);
+
+      const { data: listener } = supabase.auth.onAuthStateChange((_event, s) => {
+        setSession(s);
+        setUser(s?.user ?? null);
+        if (s?.user) loadProfile(s.user.id);
+        else setProfile(null);
+      });
+      unsubscribe = () => listener.subscription.unsubscribe();
     }
 
-    const supabase = getSupabase();
-
-    supabase.auth.getSession().then(({ data: { session: s } }) => {
-      setSession(s);
-      setUser(s?.user ?? null);
-      if (s?.user) loadProfile(s.user.id).finally(() => setLoading(false));
-      else setLoading(false);
+    boot().catch((error) => {
+      console.error("[EliteStay] auth boot failed", error);
+      if (!cancelled) setLoading(false);
     });
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, s) => {
-      setSession(s);
-      setUser(s?.user ?? null);
-      if (s?.user) loadProfile(s.user.id);
-      else setProfile(null);
-    });
-
-    return () => subscription.unsubscribe();
-  }, [configured, loadProfile]);
+    return () => {
+      cancelled = true;
+      unsubscribe?.();
+    };
+  }, [loadProfile]);
 
   const signIn = useCallback(async (email: string, password: string, portal: "guest" | "staff" = "guest") => {
     const supabase = getSupabase();

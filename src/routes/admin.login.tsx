@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
+import { getSupabaseConfigStatus } from "@/lib/supabase";
 
 export const Route = createFileRoute("/admin/login")({
   head: () => ({ meta: [{ title: "Staff Portal — EliteStay" }] }),
@@ -31,7 +32,9 @@ function AdminLoginPage() {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!configured) {
-      toast.error("Staff login is unavailable. Please try again later.");
+      const status = getSupabaseConfigStatus();
+      console.error("[EliteStay] staff login blocked", status);
+      toast.error(status.message ?? "Staff login is unavailable. Please try again later.");
       return;
     }
     setSubmitting(true);
@@ -40,6 +43,7 @@ function AdminLoginPage() {
       toast.success("Signed in successfully");
       navigate({ to: path });
     } catch (err) {
+      console.error("[EliteStay] staff login failed", err);
       toast.error(err instanceof Error ? err.message : "Sign in failed");
     } finally {
       setSubmitting(false);

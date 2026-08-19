@@ -66,6 +66,10 @@ export function isSupabaseConfigured(): boolean {
 
 let client: SupabaseClient | null = null;
 
+export function resetSupabaseClient() {
+  client = null;
+}
+
 export function getSupabase(): SupabaseClient {
   if (!isSupabaseConfigured()) {
     const status = getSupabaseConfigStatus();

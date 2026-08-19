@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
+import { getSupabaseConfigStatus } from "@/lib/supabase";
 
 type Search = { pending?: string };
 
@@ -41,7 +42,9 @@ function StaffSignUpPage() {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!configured) {
-      toast.error("Registration is unavailable. Supabase is not connected — set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in Railway Variables.");
+      const status = getSupabaseConfigStatus();
+      console.error("[EliteStay] staff signup blocked", status);
+      toast.error(status.message ?? "Registration is unavailable. Please try again later.");
       return;
     }
     if (form.password !== form.confirm) {
@@ -61,6 +64,7 @@ function StaffSignUpPage() {
       setSubmitted(true);
       toast.success("Application submitted");
     } catch (err) {
+      console.error("[EliteStay] staff signup failed", err);
       toast.error(err instanceof Error ? err.message : "Registration failed");
     } finally {
       setSubmitting(false);

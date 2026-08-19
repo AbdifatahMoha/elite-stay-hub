@@ -14,7 +14,8 @@ import { I18nProvider } from "../lib/i18n";
 import { AuthProvider } from "../lib/auth/AuthProvider";
 import { Toaster } from "@/components/ui/sonner";
 import { useHotelCatalogSync } from "@/hooks/use-hotel-catalog-sync";
-import { readPublicSupabaseEnv } from "@/lib/supabase-env";
+import { applyPublicSupabaseEnv, readPublicSupabaseEnv } from "@/lib/supabase-env";
+import { getPublicSupabaseConfig } from "@/lib/public-supabase-config";
 
 function HotelCatalogSync() {
   useHotelCatalogSync();
@@ -79,7 +80,15 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
 }
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
-  head: () => ({
+  loader: async () => {
+    try {
+      return await getPublicSupabaseConfig();
+    } catch (error) {
+      console.error("[EliteStay] root loader failed to read supabase config", error);
+      return { supabaseUrl: "", supabaseAnonKey: "" };
+    }
+  },
+  head: ({ loaderData }) => ({
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
@@ -109,6 +118,14 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400;1,500&family=Karla:wght@300;400;500;600;700&display=swap" },
+    ],
+    scripts: [
+      {
+        children: `(function(c){var w=window.__ELITESTAY_PUBLIC__=window.__ELITESTAY_PUBLIC__||{};if(c.supabaseUrl)w.supabaseUrl=c.supabaseUrl;if(c.supabaseAnonKey)w.supabaseAnonKey=c.supabaseAnonKey;})(${JSON.stringify({
+          supabaseUrl: loaderData?.supabaseUrl ?? "",
+          supabaseAnonKey: loaderData?.supabaseAnonKey ?? "",
+        })});`,
+      },
     ],
   }),
   shellComponent: RootShell,
@@ -149,6 +166,8 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  const publicEnv = Route.useLoaderData();
+  applyPublicSupabaseEnv(publicEnv);
 
   return (
     <QueryClientProvider client={queryClient}>

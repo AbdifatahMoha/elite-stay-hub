@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { getSupabaseConfigStatus } from "@/lib/supabase";
 
 export const Route = createFileRoute("/signin")({
   head: () => ({ meta: [{ title: "Sign In — EliteStay" }] }),
@@ -30,7 +31,9 @@ function SignInPage() {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!configured) {
-      toast.error("Authentication is unavailable. Please try again later.");
+      const status = getSupabaseConfigStatus();
+      console.error("[EliteStay] guest sign-in blocked", status);
+      toast.error(status.message ?? "Authentication is unavailable. Please try again later.");
       return;
     }
     setSubmitting(true);

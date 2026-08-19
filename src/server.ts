@@ -8,6 +8,28 @@ type ServerEntry = {
 };
 
 let serverEntryPromise: Promise<ServerEntry> | undefined;
+let loggedRuntimeEnv = false;
+
+function logRuntimeSupabaseEnvOnce() {
+  if (loggedRuntimeEnv) return;
+  loggedRuntimeEnv = true;
+  const url = process.env.VITE_SUPABASE_URL?.trim() || process.env.SUPABASE_URL?.trim();
+  let urlHost: string | null = null;
+  if (url) {
+    try {
+      urlHost = new URL(url).host;
+    } catch {
+      urlHost = "(invalid URL)";
+    }
+  }
+  console.info("[EliteStay] Runtime Supabase env", {
+    urlHost,
+    urlSet: Boolean(url),
+    anonKeySet: Boolean(process.env.VITE_SUPABASE_ANON_KEY?.trim() || process.env.SUPABASE_ANON_KEY?.trim()),
+    serviceRoleSet: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()),
+    appUrl: process.env.APP_URL?.trim() || process.env.RAILWAY_PUBLIC_DOMAIN?.trim() || null,
+  });
+}
 
 async function getServerEntry(): Promise<ServerEntry> {
   if (!serverEntryPromise) {
@@ -47,6 +69,7 @@ function isH3SwallowedErrorBody(body: string): boolean {
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
+      logRuntimeSupabaseEnvOnce();
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
       return await normalizeCatastrophicSsrResponse(response);

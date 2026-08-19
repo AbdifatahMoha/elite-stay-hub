@@ -1,5 +1,7 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
+import { isPlaceholderSupabaseValue, readPublicSupabaseEnv } from "@/lib/supabase-env";
+
 export type SupabaseConfigStatus = {
   configured: boolean;
   missing: string[];
@@ -8,19 +10,7 @@ export type SupabaseConfigStatus = {
 };
 
 function readClientEnv() {
-  const url = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.trim();
-  const anonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined)?.trim();
-  return { url, anonKey };
-}
-
-function isPlaceholder(url?: string, anonKey?: string) {
-  return (
-    !url ||
-    !anonKey ||
-    url.includes("your-project") ||
-    anonKey === "your-anon-key" ||
-    anonKey.includes("your-anon")
-  );
+  return readPublicSupabaseEnv();
 }
 
 export function getSupabaseConfigStatus(): SupabaseConfigStatus {
@@ -29,15 +19,15 @@ export function getSupabaseConfigStatus(): SupabaseConfigStatus {
   if (!url) missing.push("VITE_SUPABASE_URL");
   if (!anonKey) missing.push("VITE_SUPABASE_ANON_KEY");
 
-  const hasPlaceholderValues = isPlaceholder(url, anonKey);
+  const hasPlaceholderValues = isPlaceholderSupabaseValue(url, anonKey);
   const configured = Boolean(url && anonKey && url.startsWith("http") && !hasPlaceholderValues);
 
   let message: string | null = null;
   if (!configured) {
     if (missing.length) {
-      message = `Missing ${missing.join(" and ")}. Copy .env.example to .env and add your Supabase project credentials.`;
+      message = `Missing ${missing.join(" and ")}. Set them in Railway → Variables (or local .env) and redeploy.`;
     } else if (hasPlaceholderValues) {
-      message = "Replace placeholder values in .env with your real Supabase project URL and anon key.";
+      message = "Replace placeholder Supabase values with the real project URL and anon key.";
     } else if (url && !url.startsWith("http")) {
       message = "VITE_SUPABASE_URL must start with https://";
     }
@@ -46,13 +36,28 @@ export function getSupabaseConfigStatus(): SupabaseConfigStatus {
   return { configured, missing, hasPlaceholderValues, message };
 }
 
-/** Logs configuration warnings to the browser console in development only. */
 export function logSupabaseConfigWarning(): void {
-  if (!import.meta.env.DEV || typeof window === "undefined") return;
+  if (typeof console === "undefined") return;
   const status = getSupabaseConfigStatus();
-  if (!status.configured && status.message) {
-    console.warn(`[EliteStay] ${status.message}`);
+  if (status.configured) {
+    const { url } = readClientEnv();
+    let urlHost: string | null = null;
+    try {
+      urlHost = url ? new URL(url).host : null;
+    } catch {
+      urlHost = "(invalid URL)";
+    }
+    console.info("[EliteStay] Supabase client connected", {
+      urlHost,
+      anonKeySet: true,
+    });
+    return;
   }
+  console.error("[EliteStay] Supabase is not configured", {
+    missing: status.missing,
+    hasPlaceholderValues: status.hasPlaceholderValues,
+    message: status.message,
+  });
 }
 
 export function isSupabaseConfigured(): boolean {
@@ -63,9 +68,8 @@ let client: SupabaseClient | null = null;
 
 export function getSupabase(): SupabaseClient {
   if (!isSupabaseConfigured()) {
-    throw new Error(
-      "Supabase is not configured. Copy .env.example to .env and set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.",
-    );
+    const status = getSupabaseConfigStatus();
+    throw new Error(status.message ?? "Supabase is not configured.");
   }
   const { url, anonKey } = readClientEnv();
   if (!client) {

@@ -28,7 +28,7 @@ function SignUpPage() {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!configured) {
-      toast.error("Registration is unavailable. Please try again later.");
+      toast.error("Registration is unavailable. Supabase is not connected — set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in Railway Variables.");
       return;
     }
     if (form.password !== form.confirm) {

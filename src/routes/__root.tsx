@@ -14,6 +14,7 @@ import { I18nProvider } from "../lib/i18n";
 import { AuthProvider } from "../lib/auth/AuthProvider";
 import { Toaster } from "@/components/ui/sonner";
 import { useHotelCatalogSync } from "@/hooks/use-hotel-catalog-sync";
+import { readPublicSupabaseEnv } from "@/lib/supabase-env";
 
 function HotelCatalogSync() {
   useHotelCatalogSync();
@@ -116,10 +117,26 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
   errorComponent: ErrorComponent,
 });
 
+function PublicSupabaseEnvScript() {
+  const { url, anonKey } = readPublicSupabaseEnv();
+  const payload = JSON.stringify({
+    supabaseUrl: url ?? "",
+    supabaseAnonKey: anonKey ?? "",
+  });
+  return (
+    <script
+      dangerouslySetInnerHTML={{
+        __html: `(function(c){var w=window.__ELITESTAY_PUBLIC__=window.__ELITESTAY_PUBLIC__||{};if(c.supabaseUrl)w.supabaseUrl=c.supabaseUrl;if(c.supabaseAnonKey)w.supabaseAnonKey=c.supabaseAnonKey;})(${payload});`,
+      }}
+    />
+  );
+}
+
 function RootShell({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <head>
+        <PublicSupabaseEnvScript />
         <HeadContent />
       </head>
       <body>

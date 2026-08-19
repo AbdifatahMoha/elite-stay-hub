@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import type { UserRole } from "@/types/database";
+import { getPublicAppUrl, readPublicSupabaseEnv } from "@/lib/supabase-env";
 
 const hotelRoles = ["ADMIN", "MANAGER", "RECEPTIONIST", "HOUSEKEEPING", "STAFF"] as const satisfies readonly UserRole[];
 
@@ -15,8 +16,7 @@ const inviteStaffInput = z.object({
 
 async function requireAdminCaller(accessToken: string) {
   const { getSupabaseAdmin } = await import("@/lib/supabase-admin.server");
-  const url = process.env.VITE_SUPABASE_URL ?? import.meta.env.VITE_SUPABASE_URL;
-  const anonKey = process.env.VITE_SUPABASE_ANON_KEY ?? import.meta.env.VITE_SUPABASE_ANON_KEY;
+  const { url, anonKey } = readPublicSupabaseEnv();
   if (!url || !anonKey) throw new Error("Supabase client env is not configured on the server.");
 
   const userClient = createClient(url, anonKey, {
@@ -46,12 +46,13 @@ export const inviteStaffMember = createServerFn({ method: "POST" })
     const { getServerSupabaseConfigStatus } = await import("@/lib/supabase-admin.server");
     if (!getServerSupabaseConfigStatus().configured) {
       throw new Error(
-        "Staff invitations require SUPABASE_SERVICE_ROLE_KEY in .env (server-only). See .env.example.",
+        "Staff invitations require SUPABASE_SERVICE_ROLE_KEY in Railway Variables (server-only, never prefix with VITE_).",
       );
     }
 
     const { admin } = await requireAdminCaller(data.accessToken);
-    const redirectTo = `${process.env.APP_URL ?? "http://localhost:8080"}/admin/login`;
+    const appUrl = getPublicAppUrl() || "http://localhost:8080";
+    const redirectTo = `${appUrl}/admin/login`;
 
     const { data: inviteData, error: inviteError } = await admin.auth.admin.inviteUserByEmail(data.email, {
       data: { full_name: data.full_name, role: data.role },

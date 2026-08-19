@@ -1,4 +1,5 @@
 import { getSupabase } from "@/lib/supabase";
+import { getPublicAppUrl } from "@/lib/supabase-env";
 import type { Profile, ProfileStatus, UserRole } from "@/types/database";
 
 export async function fetchProfile(userId: string): Promise<Profile | null> {
@@ -96,7 +97,7 @@ export async function rejectStaffProfile(id: string) {
 
 export async function resetStaffPassword(email: string, redirectPath = "/admin/login") {
   const supabase = getSupabase();
-  const appUrl = typeof window !== "undefined" ? window.location.origin : "http://localhost:8080";
+  const appUrl = typeof window !== "undefined" ? window.location.origin : getPublicAppUrl();
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
     redirectTo: `${appUrl}${redirectPath}`,
   });

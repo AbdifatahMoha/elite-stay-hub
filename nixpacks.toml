@@ -1,0 +1,2 @@
+[start]
+cmd = "HOST=0.0.0.0 node .output/server/index.mjs"

@@ -1,0 +1,12 @@
+.git
+.cursor
+node_modules
+dist
+.output
+.tanstack
+.nitro
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
